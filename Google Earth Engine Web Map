@@ -1,3 +1,4 @@
+//import all data
 var table = ee.FeatureCollection("users/amykrystosik/Insight/buffered_waste_manual2000"),
     dump_sf = ee.Image("users/amykrystosik/Insight/Classified_pixel_demo_sf"),
     dump_mombasa = ee.Image("users/amykrystosik/Insight/Classified_pixel_mombasa"),
@@ -507,3 +508,179 @@ var table = ee.FeatureCollection("users/amykrystosik/Insight/buffered_waste_manu
               "category": 1,
               "system:index": "83"
             })]);
+
+
+//create web map
+
+// Load a Landsat 8 composite and display on the map.
+//var image = ee.Image('LANDSAT/LC8_L1T_32DAY_TOA/20130407').select('B[1-7]');
+//Map.addLayer(image, {bands:['B4','B3','B2'], min: 0, max: 0.3});
+
+// Display known dump sites.
+var points = ee.Collection.loadTable('users/amykrystosik/Insight/buffered_waste_manual2000');
+//Map.addLayer(points, {min: 0, max: 1, palette: ['red','blue']}, 'known dumps');
+ee.Algorithms.Describe(points)
+// Display known dump sites.
+var squares = ee.Collection.loadTable('users/amykrystosik/Insight/square_waste');
+//Map.addLayer(squares, {min: 0, max: 1, palette: ['red','blue']}, 'squares');
+
+
+//display predictions by region
+// Extract a band sf
+var dump_prob = dump_sf.select('dupmProb');
+var dump_prob_mask = dump_prob.gt(0.7)
+Map.addLayer(dump_prob_mask.updateMask(dump_prob_mask), {palette: 'red'}, 'Probability of Dump Bay Area');
+
+var prediction = dump_sf.select('prediction');
+// Mask the band with itself to remove zeros. sf
+// I am assuming you are loading this via ee.FeatureCollection etc
+//Map.addLayer(prediction.updateMask(prediction), {palette: 'red'}, 'Masked Prediction Bay Area');
+
+
+// Extract a band. mombasa
+var dump_prob2 = dump_mombasa.select('dupmProb');
+var prediction2 = dump_mombasa.select('prediction');
+// Mask the band with itself to remove zeros. mombasa
+//Map.addLayer(dump_prob2.updateMask(dump_prob2), {palette: 'blue'}, 'Probability of Dump Mombasa');
+Map.addLayer(prediction2.updateMask(prediction2), {palette: 'red'}, 'Masked Prediction Mombasa');
+
+
+//Map.setCenter(39.5, -4,9)
+
+
+// Create the title label.
+var title = ui.Label('Click on Map to Quantify Prediction');
+title.style().set('position', 'top-center');
+Map.add(title);
+
+// Create a panel to hold the chart.
+var panel_bay = ui.Panel();
+panel_bay.style().set({
+  width: '400px',
+  position: 'bottom-right'
+});
+Map.add(panel_bay);
+
+// Register a function to draw a chart when a user clicks on the map. bay area
+Map.onClick(function(coords) {
+  panel_bay.clear();
+  var point = ee.Geometry.Point(coords.lon, coords.lat);
+  var chart = ui.Chart.image.regions(
+    dump_sf, point, null, 30)
+    .setChartType('BarChart')
+    .setOptions({title: 'Prediction values',
+                  hAxis: {title: 'Probability'},
+                  vAxis: {title: 'Predictions'},
+    });
+  panel_bay.add(chart);
+});
+
+//preset list of locations we have predicted.
+var places = {
+  BayArea: [-122.419236, 37.648891,9],
+  Mombasa: [39.5, -4,9]
+};
+
+var select_prediction = ui.Select({
+  items: Object.keys(places),
+  onChange: function(key) {
+    Map.setCenter(places[key][0], places[key][1],places[key][2]);
+  }
+});
+
+select_prediction.setPlaceholder('Choose a region to view prediction...');
+var panel_select_region = ui.Panel();
+panel_select_region.style().set({
+  width: '300px',
+  position: 'top-right'
+});
+Map.add(panel_select_region);
+
+panel_select_region.add(select_prediction);
+
+//////zoom to dumpsites
+
+var coords = dumpsites_manual.getInfo()
+var features = coords['features']
+
+var select = ui.Select({
+  items: Object.keys(features),
+  onChange: function(key) {
+    Map.setCenter(features[key]['geometry']['coordinates'][0], features[key]['geometry']['coordinates'][1],17);
+  }
+});
+
+// Set a place holder.
+select.setPlaceholder('Choose a dump to view...');
+var panel_select_dump = ui.Panel()
+panel_select_dump.add(select)
+panel_select_dump.style().set({
+  width: '300px',
+  position: 'top-right'
+});
+Map.add(panel_select_dump)
+
+
+
+//add legend
+// set position of panel
+var legend = ui.Panel({
+  style: {
+    position: 'bottom-left',
+    padding: '8px 15px'
+  }
+});
+ 
+// Create legend title
+var legendTitle = ui.Label({
+  value: 'Prediction Legend',
+  style: {
+    fontWeight: 'bold',
+    fontSize: '18px',
+    margin: '0 0 4px 0',
+    padding: '0'
+    }
+});
+ 
+// Add the title to the panel
+legend.add(legendTitle);
+ 
+// Creates and styles 1 row of the legend.
+var makeRow = function(color, name) {
+ 
+      // Create the label that is actually the colored box.
+      var colorBox = ui.Label({
+        style: {
+          backgroundColor: '#' + color,
+          // Use padding to give the box height and width.
+          padding: '8px',
+          margin: '0 0 4px 0'
+        }
+      });
+ 
+      // Create the label filled with the description text.
+      var description = ui.Label({
+        value: name,
+        style: {margin: '0 0 4px 6px'}
+      });
+ 
+      // return the panel
+      return ui.Panel({
+        widgets: [colorBox, description],
+        layout: ui.Panel.Layout.Flow('horizontal')
+      });
+};
+ 
+//  Palette with the colors
+var palette =['FF0000'];
+ 
+// name of the legend
+var names = ['Predicted Dumpsite'];
+ 
+// Add color and and names
+for (var i = 0; i < 1; i++) {
+  legend.add(makeRow(palette[i], names[i]));
+  }  
+ 
+// add legend to map (alternatively you can also print the legend to the console)
+Map.add(legend);
